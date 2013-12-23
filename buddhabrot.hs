@@ -13,6 +13,7 @@ import Data.Array.IO
 import Data.Word(Word32, Word8)
 import qualified  Data.ByteString.Lazy as L
 import Text.Printf
+import Codec.Picture
 
 data CPoint = CPoint { re :: Double, im :: Double }
               deriving (Eq, Show)
@@ -30,7 +31,7 @@ maxK = 20 * 1000
 radius = 4
 
 imgpath =
-  printf "/tmp/buddhabrot-%dM-%dK_%dK_id.tga"
+  printf "/tmp/buddhabrot-%dM-%dK_%dK_id.png"
     (div samples 1000000) (div minK 1000) (div maxK 1000)
 
 xpixels = 1000 :: Int
@@ -108,16 +109,18 @@ norm min max cnt = fromIntegral v
         u = normFunc t
         v = floor $ u * 255
 
-triple :: Word8 -> [Word8]
-triple x = [x, x, x]
+gray :: Word8 -> PixelRGB8
+gray x = PixelRGB8 x x x
 
-reddish :: Word8 -> [Word8]
-reddish x = [0, 2 * g, 2 * r]
-  where r = min x 127
-        g = min (x - r) 127
+reddish :: Word8 -> PixelRGB8
+reddish x = PixelRGB8 r g 0
+  where xr = min x 127
+        xg = min (x - xr) 127
+        r = 2 * xr
+        g = 2 * xg
 
-flames :: Word8 -> [Word8]
-flames x = [b, g, r]
+flames :: Word8 -> PixelRGB8
+flames x = PixelRGB8 r g b
   where xr = min 120 x
         xg = min 120 (x - xr)
         xb = min 15 (x - xr - xg)
@@ -125,36 +128,20 @@ flames x = [b, g, r]
         g = xg * 2 + xg `div` 10
         b = xb * 17
 
-toTga :: [Word32] -> L.ByteString
-toTga values = L.pack (header ++ body)
-  where header = map fromIntegral [
-          0, -- length of ID
-          0, -- no color map
-          2, -- uncompressed RGB
-          0, -- index of color map entry
-          0,
-          0, -- color map length
-          0,
-          0, -- color map size
-          0, -- X origin
-          0,
-          0, -- Y origin
-          0,
-          xpixels `mod` 256, -- X width
-          xpixels `div` 256,
-          ypixels `mod` 256, -- Y width
-          ypixels `div` 256,
-          24, -- 24 bit bitmap
-          0
-          ]
-        biggest = maximum values
-        smallest = minimum values
-        body = concat $ map (colorScheme . norm smallest biggest) values
+toPixel :: Word32 -> Word32 -> Word32 -> PixelRGB8
+toPixel smallest biggest = colorScheme . norm smallest biggest
+
+getPix :: IOUArray Int Word32 -> Word32 -> Word32 -> Int -> Int -> IO PixelRGB8
+getPix img smallest biggest x y = do
+  v <- readArray img (x + xpixels * y)
+  return $ toPixel smallest biggest v
+
 
 main = do
   putStrLn $ printf "Sampling %d millions points..." samplesMillions
   let seed = mkStdGen 0
   -- seed <- getStdGen
+  
   let points = take samples $ randomRs (loCorner, hiCorner) seed
       selected = filter inSet points
       res = filter inWindow $ concat $ map orbs selected
@@ -162,7 +149,11 @@ main = do
   
   img <- newArray (0, pixels - 1) (0 :: Word32) :: IO (IOUArray Int Word32)
   sequence_ $ map (plotPix img) coords
-  putStrLn $ "Writing " ++ imgpath ++ " ..."
   values <- getElems img
-  L.writeFile imgpath $ toTga values
+  
+  putStrLn $ "Writing " ++ imgpath ++ " ..."
+  let smallest = minimum values
+      biggest  = maximum values
+  ima <- withImage xpixels ypixels (getPix img smallest biggest)
+  writePng imgpath ima
   putStrLn "Done!"
