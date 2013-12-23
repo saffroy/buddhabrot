@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -XFlexibleInstances #-}
+
 {- buddhabrot reimplementation
    based on C source at: http://paulbourke.net/fractals/buddhabrot/
    see also:
@@ -8,6 +10,7 @@
    http://kindofdoon.blogspot.fr/2012/09/the-colored-orbit-buddhabrot.html
 -}
 
+import Data.Complex
 import System.Random
 import Data.Array.IO
 import Data.Word(Word32, Word8)
@@ -15,13 +18,12 @@ import qualified  Data.ByteString.Lazy as L
 import Text.Printf
 import Codec.Picture
 
-data CPoint = CPoint { re :: Double, im :: Double }
-              deriving (Eq, Show)
-instance Random CPoint where
-  randomR (loPoint, hiPoint) g = (CPoint { re = r, im = i}, g2)
-    where (r, g1) = randomR (re loPoint, re hiPoint) g
-          (i, g2) = randomR (im loPoint, im hiPoint) g1
-  random = randomR (CPoint { re = 0, im = 0 }, CPoint { re = 1, im = 1 })
+
+instance Random (Complex Double) where
+  randomR (loPoint, hiPoint) g = (r :+ i, g2)
+    where (r, g1) = randomR (realPart loPoint, realPart hiPoint) g
+          (i, g2) = randomR (imagPart loPoint, imagPart hiPoint) g1
+  random = randomR (0.0 :+ 0.0, 1.0 :+ 1.0)
 
 samplesMillions = 500
 samples = samplesMillions * 1000 * 1000
@@ -38,18 +40,18 @@ xpixels = 1000 :: Int
 ypixels = 1000 :: Int
 pixels = xpixels * ypixels
 
-loCorner = CPoint { re = -2, im = -1.5 }
-hiCorner = CPoint { re =  1, im =  1.5 }
+loCorner = (-2.0) :+ (-1.5)
+hiCorner =   1.0  :+   1.5
 
 colorScheme = flames
 normFunc = id -- or sqrt or (**2)
 
 --
 
-xmin = re loCorner
-xmax = re hiCorner
-ymin = im loCorner
-ymax = im hiCorner
+xmin = realPart loCorner
+xmax = realPart hiCorner
+ymin = imagPart loCorner
+ymax = imagPart hiCorner
 
 xrange = (xmin, xmax)
 yrange = (ymin, ymax)
@@ -60,12 +62,14 @@ rel (lo, hi) v = (v - lo) / (hi - lo)
 
 toPix :: Int -> (Double, Double) -> Double -> Int
 toPix pixrange realrange a = floor $ (fromIntegral pixrange) * (rel realrange a)
-                              
-toWindow :: CPoint -> (Int, Int)
-toWindow pt = (toPix xpixels xrange $ re pt, toPix ypixels yrange $ im pt)
 
-inWindow :: CPoint -> Bool
-inWindow CPoint { re = x, im = y } = x >= xmin && x < xmax && y >= ymin && y < ymax
+toWindow :: Complex Double -> (Int, Int)
+toWindow z = (toPix xpixels xrange $ realPart z, toPix ypixels yrange $ imagPart z)
+
+inWindow :: Complex Double -> Bool
+inWindow z = x >= xmin && x < xmax && y >= ymin && y < ymax
+  where x = realPart z
+        y = imagPart z
 
 iterations :: Double -> Double -> Double -> Double -> Int -> Int
 iterations x y x0 y0 k  =
@@ -76,24 +80,23 @@ iterations x y x0 y0 k  =
    then k
    else iterations (x2 - y2 + x0) (2 * x * y + y0) x0 y0 (k + 1)
 
-inSet :: CPoint -> Bool
-inSet pt = k >= minK && k < maxK
-  where k = iterations (re pt) (im pt) (re pt) (im pt) 0
+inSet :: Complex Double -> Bool
+inSet z = k >= minK && k < maxK
+  where k = iterations (realPart z) (imagPart z) (realPart z) (imagPart z) 0
 
-orbit :: Double -> Double -> Double -> Double -> [CPoint] -> [CPoint]
+orbit :: Double -> Double -> Double -> Double -> [Complex Double] -> [Complex Double]
 orbit x y x0 y0 l =
   let x2 = x * x
       y2 = y * y
       newx = (x2 - y2 + x0)
       newy = (2 * x * y + y0)
-      pt = CPoint { re = newx, im = newy }
   in
    if x2 + y2 > radius
    then l
-   else orbit newx newy x0 y0 (pt : l)
+   else orbit newx newy x0 y0 (newx :+ newy : l)
 
-orbs :: CPoint -> [CPoint]
-orbs pt = orbit (re pt) (im pt) (re pt) (im pt) []
+orbs :: Complex Double -> [Complex Double]
+orbs z = orbit (realPart z) (imagPart z) (realPart z) (imagPart z) []
 
 plotPix :: IOUArray Int Word32 -> (Int, Int) -> IO ()
 plotPix img (x, y) = do
