@@ -1,5 +1,8 @@
 PROGS = buddhabrot
 GHCFLAGS = -O3 -rtsopts
+ifneq ($(PROFILE),)
+GHCFLAGS += -prof -auto-all -caf-all -fforce-recomp
+endif
 
 buddhabrot: GHCFLAGS += -with-rtsopts=-K32M
 
