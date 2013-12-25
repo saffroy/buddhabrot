@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -XFlexibleInstances #-}
+{-# LANGUAGE FlexibleInstances, BangPatterns #-}
 
 {- buddhabrot reimplementation
    based on C source at: http://paulbourke.net/fractals/buddhabrot/
@@ -20,13 +20,12 @@ import Codec.Picture
 
 
 instance Random (Complex Double) where
-  randomR (loPoint, hiPoint) g = (r :+ i, g2)
+  randomR (!loPoint, !hiPoint) g = (r :+ i, g2)
     where (r, g1) = randomR (realPart loPoint, realPart hiPoint) g
           (i, g2) = randomR (imagPart loPoint, imagPart hiPoint) g1
   random = randomR (0.0 :+ 0.0, 1.0 :+ 1.0)
 
-samplesMillions = 500
-samples = samplesMillions * 1000 * 1000
+samples = 1000 * 1000 * 500
 
 minK =  1 * 1000
 maxK = 20 * 1000
@@ -34,7 +33,7 @@ radius = 4
 
 imgpath =
   printf "/tmp/buddhabrot-%dM-%dK_%dK_id.png"
-    (div samples 1000000) (div minK 1000) (div maxK 1000)
+    (samples `div` 1000000) (minK `div` 1000) (maxK `div` 1000)
 
 xpixels = 1000 :: Int
 ypixels = 1000 :: Int
@@ -72,7 +71,7 @@ inWindow z = x >= xmin && x < xmax && y >= ymin && y < ymax
         y = imagPart z
 
 iterations :: Double -> Double -> Double -> Double -> Int -> Int
-iterations x y x0 y0 k  =
+iterations !x !y !x0 !y0 !k  =
   let x2 = x * x
       y2 = y * y
   in
@@ -80,9 +79,18 @@ iterations x y x0 y0 k  =
    then k
    else iterations (x2 - y2 + x0) (2 * x * y + y0) x0 y0 (k + 1)
 
+inCardioBulb :: Double -> Double -> Bool
+inCardioBulb !x !y = inCardio || inBulb
+  where sqr a = a * a
+        q = sqr (x - 1/4) + sqr y
+        inCardio = q * (q + (x - 1/4)) < sqr y / 4
+        inBulb = sqr (x + 1) + sqr y < 1 / 16
+
 inSet :: Complex Double -> Bool
-inSet z = k >= minK && k < maxK
-  where k = iterations (realPart z) (imagPart z) (realPart z) (imagPart z) 0
+inSet !z = not (inCardioBulb x y) && k >= minK && k < maxK
+  where x = realPart z
+        y = imagPart z
+        k = iterations x y x y 0
 
 orbit :: Double -> Double -> Double -> Double -> [Complex Double] -> [Complex Double]
 orbit x y x0 y0 l =
@@ -96,7 +104,9 @@ orbit x y x0 y0 l =
    else orbit newx newy x0 y0 (newx :+ newy : l)
 
 orbs :: Complex Double -> [Complex Double]
-orbs z = orbit (realPart z) (imagPart z) (realPart z) (imagPart z) []
+orbs z = orbit x y x y []
+  where x = realPart z
+        y = imagPart z
 
 plotPix :: IOUArray Int Word32 -> (Int, Int) -> IO ()
 plotPix img (x, y) = do
@@ -141,7 +151,7 @@ getPix img smallest biggest x y = do
 
 
 main = do
-  putStrLn $ printf "Sampling %d millions points..." samplesMillions
+  putStrLn $ printf "Sampling %d millions points..." $ samples `div` 1000000
   let seed = mkStdGen 0
   -- seed <- getStdGen
   
