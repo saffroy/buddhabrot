@@ -19,21 +19,11 @@ import Text.Printf
 import Codec.Picture
 
 
-instance Random (Complex Double) where
-  randomR (!loPoint, !hiPoint) g = (r :+ i, g2)
-    where (r, g1) = randomR (realPart loPoint, realPart hiPoint) g
-          (i, g2) = randomR (imagPart loPoint, imagPart hiPoint) g1
-  random = randomR (0.0 :+ 0.0, 1.0 :+ 1.0)
-
 samples = 1000 * 1000 * 500
 
 minK =  1 * 1000
 maxK = 20 * 1000
 radius = 4
-
-imgpath =
-  printf "/tmp/buddhabrot-%dM-%dK_%dK_id.png"
-    (samples `div` 1000000) (minK `div` 1000) (maxK `div` 1000)
 
 xpixels = 1000 :: Int
 ypixels = 1000 :: Int
@@ -46,6 +36,22 @@ colorScheme = flames
 normFunc = id -- or sqrt or (**2)
 
 --
+
+instance Random (Complex Double) where
+  randomR (!loPoint, !hiPoint) g = (r :+ i, g2)
+    where (r, g1) = randomR (realPart loPoint, realPart hiPoint) g
+          (i, g2) = randomR (imagPart loPoint, imagPart hiPoint) g1
+  random = randomR (0.0 :+ 0.0, 1.0 :+ 1.0)
+
+toUnit :: Int -> String
+toUnit n | n < 10^3 = show n ++ ""
+         | n < 10^6 = show (n `div` 10^3) ++ "K"
+         | n < 10^9 = show (n `div` 10^6) ++ "M"
+         | otherwise = show (n `div` 10^9) ++ "G"
+
+imgpath =
+  printf "/tmp/buddhabrot-%s-%s_%s_id.png"
+    (toUnit samples) (toUnit minK) (toUnit maxK)
 
 xmin = realPart loCorner
 xmax = realPart hiCorner
@@ -71,7 +77,7 @@ inWindow z = x >= xmin && x < xmax && y >= ymin && y < ymax
         y = imagPart z
 
 iterations :: Double -> Double -> Double -> Double -> Int -> Int
-iterations !x !y !x0 !y0 !k  =
+iterations !x !y !x0 !y0 !k =
   let x2 = x * x
       y2 = y * y
   in
@@ -118,7 +124,6 @@ norm :: Word32 -> Word32 -> Word32 -> Word8
 norm min max cnt = fromIntegral v
   where s = 2.0 * fromIntegral (cnt - min) / fromIntegral (max - min)
         t = if s > 1.0 then 1.0 else s
-        -- u = t ** 2
         u = normFunc t
         v = floor $ u * 255
 
