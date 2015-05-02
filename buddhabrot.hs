@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleInstances, BangPatterns #-}
+{-# LANGUAGE FlexibleInstances, BangPatterns, DeriveDataTypeable #-}
 
 {- buddhabrot reimplementation
    based on C source at: http://paulbourke.net/fractals/buddhabrot/
@@ -17,17 +17,17 @@ import Data.Word(Word32, Word8)
 import qualified  Data.ByteString.Lazy as L
 import Text.Printf
 import Codec.Picture
+import System.Console.CmdArgs
 
-
-samples = 1000 * 1000 * 500
-
-minK =  1 * 1000
-maxK = 20 * 1000
-radius = 4
-
-xpixels = 1000 :: Int
-ypixels = 1000 :: Int
-pixels = xpixels * ypixels
+data BBrotConf = BBrotConf {
+      seed    :: Maybe Int
+    , samples :: Int
+    , minK    :: Int
+    , maxK    :: Int
+    , xpixels :: Int
+    , ypixels :: Int
+    , output  :: Maybe String
+  } deriving (Show, Data, Typeable)
 
 loCorner = (-2.0) :+ (-1.5)
 hiCorner =   1.0  :+   1.5
@@ -49,9 +49,11 @@ toUnit n | n < 10^3 = show n ++ ""
          | n < 10^9 = show (n `div` 10^6) ++ "M"
          | otherwise = show (n `div` 10^9) ++ "G"
 
-imgpath =
-  printf "/tmp/buddhabrot-%s-%s_%s_id.png"
-    (toUnit samples) (toUnit minK) (toUnit maxK)
+imgpath conf =
+    case output conf of
+      Just path -> path
+      Nothing -> printf "/tmp/buddhabrot-%s-%s_%s_id.png"
+                     (toUnit $ samples conf) (toUnit $ minK conf) (toUnit $ maxK conf)
 
 xmin = realPart loCorner
 xmax = realPart hiCorner
@@ -68,22 +70,24 @@ rel (lo, hi) v = (v - lo) / (hi - lo)
 toPix :: Int -> (Double, Double) -> Double -> Int
 toPix pixrange realrange a = floor $ (fromIntegral pixrange) * (rel realrange a)
 
-toWindow :: Complex Double -> (Int, Int)
-toWindow z = (toPix xpixels xrange $ realPart z, toPix ypixels yrange $ imagPart z)
+toImgCoords :: Int -> Int -> Complex Double -> (Int, Int)
+toImgCoords xres yres z =
+    (toPix xres xrange $ realPart z,
+     toPix yres yrange $ imagPart z)
 
 inWindow :: Complex Double -> Bool
 inWindow z = x >= xmin && x < xmax && y >= ymin && y < ymax
   where x = realPart z
         y = imagPart z
 
-iterations :: Double -> Double -> Double -> Double -> Int -> Int
-iterations !x !y !x0 !y0 !k =
+iterations :: Int -> Double -> Double -> Double -> Double -> Int -> Int
+iterations !maxK !x !y !x0 !y0 !k =
   let x2 = x * x
       y2 = y * y
   in
-   if k == maxK || x2 + y2 > radius
+   if k == maxK || x2 + y2 > 4
    then k
-   else iterations (x2 - y2 + x0) (2 * x * y + y0) x0 y0 (k + 1)
+   else iterations maxK (x2 - y2 + x0) (2 * x * y + y0) x0 y0 (k + 1)
 
 inCardioBulb :: Double -> Double -> Bool
 inCardioBulb !x !y = inCardio || inBulb
@@ -92,11 +96,11 @@ inCardioBulb !x !y = inCardio || inBulb
         inCardio = q * (q + (x - 1/4)) < sqr y / 4
         inBulb = sqr (x + 1) + sqr y < 1 / 16
 
-inSet :: Complex Double -> Bool
-inSet !z = not (inCardioBulb x y) && k >= minK && k < maxK
+inSet :: Int -> Int -> Complex Double -> Bool
+inSet !minK !maxK !z = not (inCardioBulb x y) && k >= minK && k < maxK
   where x = realPart z
         y = imagPart z
-        k = iterations x y x y 0
+        k = iterations maxK x y x y 0
 
 orbit :: Double -> Double -> Double -> Double -> [Complex Double] -> [Complex Double]
 orbit x y x0 y0 l =
@@ -105,7 +109,7 @@ orbit x y x0 y0 l =
       newx = (x2 - y2 + x0)
       newy = (2 * x * y + y0)
   in
-   if x2 + y2 > radius
+   if x2 + y2 > 4
    then l
    else orbit newx newy x0 y0 (newx :+ newy : l)
 
@@ -114,9 +118,9 @@ orbs z = orbit x y x y []
   where x = realPart z
         y = imagPart z
 
-plotPix :: IOUArray Int Word32 -> (Int, Int) -> IO ()
-plotPix img (x, y) = do
-  let offset = y * xpixels + x
+plotPix :: IOUArray Int Word32 -> Int -> (Int, Int) -> IO ()
+plotPix img xres (x, y) = do
+  let offset = y * xres + x
   v <- readArray img offset
   writeArray img offset (v + 1)
 
@@ -149,29 +153,45 @@ flames x = PixelRGB8 r g b
 toPixel :: Word32 -> Word32 -> Word32 -> PixelRGB8
 toPixel smallest biggest = colorScheme . norm smallest biggest
 
-getPix :: IOUArray Int Word32 -> Word32 -> Word32 -> Int -> Int -> IO PixelRGB8
-getPix img smallest biggest x y = do
-  v <- readArray img (x + xpixels * y)
+getPix :: IOUArray Int Word32 -> Int -> Word32 -> Word32 -> Int -> Int -> IO PixelRGB8
+getPix img xres smallest biggest x y = do
+  v <- readArray img (x + xres * y)
   return $ toPixel smallest biggest v
 
-
 main = do
-  putStrLn $ printf "Sampling %d millions points..." $ samples `div` 1000000
-  let seed = mkStdGen 0
-  -- seed <- getStdGen
-  
-  let points = take samples $ randomRs (loCorner, hiCorner) seed
-      selected = filter inSet points
-      res = filter inWindow $ concat $ map orbs selected
-  let coords = map toWindow res
-  
-  img <- newArray (0, pixels - 1) (0 :: Word32) :: IO (IOUArray Int Word32)
-  sequence_ $ map (plotPix img) coords
+  -- Note: CmdArgs annotations are impure, they can be used only once
+  conf <- cmdArgs $ BBrotConf {
+                     seed     = Nothing           &= name "s"
+                   , samples  = 1000 * 1000 * 500 &= name "n"
+                   , minK     = 1000 * 1          &= name "m"
+                   , maxK     = 1000 * 20         &= name "M"
+                   , xpixels  = 1000              &= name "x"
+                   , ypixels  = 1000              &= name "y"
+                   , output   = Nothing           &= name "o"
+                   } &= program "buddhabrot"
+
+  putStrLn $ printf "Sampling %s points..." $ toUnit $ samples conf
+  randGen <- case seed conf of
+               Nothing -> getStdGen
+               Just s -> return $ mkStdGen s
+
+  let points = take (samples conf) $ randomRs (loCorner, hiCorner) randGen
+      selected = filter p points
+          where p = inSet (minK conf) (maxK conf)
+      result = filter inWindow $ concat $ map orbs selected
+
+  let xres = xpixels conf
+      yres = ypixels conf
+      nPixels = xres * yres
+      coords = map (toImgCoords xres yres) result
+  img <- newArray (0, nPixels - 1) (0 :: Word32) :: IO (IOUArray Int Word32)
+  sequence_ $ map (plotPix img xres) coords
   values <- getElems img
-  
-  putStrLn $ "Writing " ++ imgpath ++ " ..."
+
+  let outfile = imgpath conf
+  putStrLn $ "Writing " ++ outfile ++ " ..."
   let smallest = minimum values
       biggest  = maximum values
-  ima <- withImage xpixels ypixels (getPix img smallest biggest)
-  writePng imgpath ima
+  ima <- withImage xres yres (getPix img xres smallest biggest)
+  writePng outfile ima
   putStrLn "Done!"
