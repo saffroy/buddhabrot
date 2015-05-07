@@ -195,14 +195,14 @@ main = do
                        (toUnit $ maxK conf)
 
       whenNormal $ putStrLn $ "Writing cache " ++ cachefile ++ " ..."
-      writeFile cachefile $ show selected
+      writeFile cachefile $ unlines . map show $ selected
       whenLoud $ putStrLn $ "selected points: " ++ show (length selected)
 
     conf@(Render _ _ _ _ _ _) -> do
       -- Load points of interest, render their orbits into a PNG image.
       whenNormal $ putStrLn $ "Loading cache " ++ icachepath conf ++ " ..."
       contents <- readFile $ icachepath conf
-      let selected = read contents :: [Complex Double]
+      let selected = map (read :: String -> Complex Double) $ lines contents
           orbits = concat $ map orbs selected
           result = filter inWindow orbits
       whenLoud $ putStrLn $ "selected points: " ++ show (length selected)
