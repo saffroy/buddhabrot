@@ -15,7 +15,7 @@ import System.Random
 import Data.Array.IO
 import Data.Word(Word32, Word8)
 import Text.Printf
-import Codec.Picture
+import Codec.Picture hiding (Palette)
 import System.Console.CmdArgs
 
 data Palette = Gray | Reddish | Flames
