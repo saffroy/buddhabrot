@@ -58,20 +58,20 @@ xmax = realPart hiCorner
 ymin = imagPart loCorner
 ymax = imagPart hiCorner
 
-xrange = (xmin, xmax)
-yrange = (ymin, ymax)
+xrange = xmax - xmin
+yrange = ymax - ymin
 
 
-rel :: (Double, Double) -> Double -> Double
-rel (lo, hi) v = (v - lo) / (hi - lo)
+rel :: Double -> Double -> Double -> Double
+rel !lo !range !v = (v - lo) / range
 
-toPix :: Int -> (Double, Double) -> Double -> Int
-toPix pixrange realrange a = floor $ (fromIntegral pixrange) * (rel realrange a)
+toPix :: Int -> Double -> Double -> Double -> Int
+toPix !pixrange !realmin !realrange !a = floor $ (fromIntegral pixrange) * (rel realmin realrange a)
 
 toImgCoords :: Int -> Int -> Complex Double -> (Int, Int)
-toImgCoords xres yres z =
-    (toPix xres xrange $ realPart z,
-     toPix yres yrange $ imagPart z)
+toImgCoords !xres !yres !z =
+    (toPix xres xmin xrange $ realPart z,
+     toPix yres ymin yrange $ imagPart z)
 
 inWindow :: Complex Double -> Bool
 inWindow z = x >= xmin && x < xmax && y >= ymin && y < ymax
@@ -101,11 +101,11 @@ inSet !minK !maxK !z = not (inCardioBulb x y) && k >= minK && k < maxK
         k = iterations maxK x y x y 0
 
 orbit :: Double -> Double -> Double -> Double -> [Complex Double] -> [Complex Double]
-orbit x y x0 y0 l =
-  let x2 = x * x
-      y2 = y * y
-      newx = (x2 - y2 + x0)
-      newy = (2 * x * y + y0)
+orbit !x !y !x0 !y0 l =
+  let !x2 = x * x
+      !y2 = y * y
+      !newx = (x2 - y2 + x0)
+      !newy = (2 * x * y + y0)
   in
    if x2 + y2 > 4
    then l
@@ -117,8 +117,8 @@ orbs z = orbit x y x y []
         y = imagPart z
 
 plotPix :: IOUArray Int Word32 -> Int -> (Int, Int) -> IO ()
-plotPix img xres (x, y) = do
-  let offset = y * xres + x
+plotPix !img !xres (!x, !y) = do
+  let !offset = y * xres + x
   v <- readArray img offset
   writeArray img offset (v + 1)
 
@@ -203,7 +203,7 @@ main = do
       whenNormal $ putStrLn $ "Loading cache " ++ icachepath conf ++ " ..."
       contents <- readFile $ icachepath conf
       let selected = map (read :: String -> Complex Double) $ lines contents
-          orbits = concat $ map orbs selected
+          orbits = concatMap orbs selected
           result = filter inWindow orbits
       whenLoud $ putStrLn $ "selected points: " ++ show (length selected)
 
@@ -212,7 +212,7 @@ main = do
           nPixels = xres * yres
           coords = map (toImgCoords xres yres) result
       img <- newArray (0, nPixels - 1) (0 :: Word32) :: IO (IOUArray Int Word32)
-      sequence_ $ map (plotPix img xres) coords
+      mapM_ (plotPix img xres) coords
       values <- getElems img
       whenLoud $ putStrLn $ "img points: " ++ show (sum values)
 
@@ -220,8 +220,8 @@ main = do
             Just s -> s
             Nothing -> icachepath conf ++ ".png"
       whenNormal $ putStrLn $ "Writing " ++ outfile ++ " ..."
-      let smallest = minimum values
-          biggest  = maximum values
+      let !smallest = minimum values
+          !biggest  = maximum values
           colorScheme = case palette conf of
             Flames -> flames
             Gray -> gray
