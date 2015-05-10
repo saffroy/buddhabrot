@@ -1,4 +1,5 @@
 PROGS = buddhabrot
+GHC ?= ghc
 GHCFLAGS = -O3 -rtsopts
 ifneq ($(PROFILE),)
 GHCFLAGS += -prof -auto-all -caf-all -fforce-recomp
@@ -9,7 +10,7 @@ buddhabrot: GHCFLAGS += -with-rtsopts=-K32M
 all: $(PROGS)
 
 %: %.hs
-	ghc $(GHCFLAGS) --make $@
+	$(GHC) $(GHCFLAGS) --make $@
 
 clean:
 	$(RM) $(PROGS) *.hi *.o
