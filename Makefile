@@ -1,6 +1,6 @@
 PROGS = buddhabrot
 GHC ?= ghc
-GHCFLAGS = -O3 -rtsopts
+GHCFLAGS = -O3 -rtsopts -fllvm
 ifneq ($(PROFILE),)
 GHCFLAGS += -prof -auto-all -caf-all -fforce-recomp
 endif
