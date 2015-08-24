@@ -9,6 +9,8 @@ buddhabrot: GHCFLAGS += -with-rtsopts=-K32M
 
 all: $(PROGS)
 
+buddhabrot: *.hs
+
 %: %.hs
 	$(GHC) $(GHCFLAGS) --make $@
 
