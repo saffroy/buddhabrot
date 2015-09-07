@@ -25,7 +25,7 @@ getConf = cmdArgs $ modes [
                    , minK       = 1000 * 1          &= name "k"
                    , maxK       = 1000 * 20         &= name "K"
                    , ocachepath = Nothing           &= name "c" &= typFile
-                   , gridStep   = 0.05              &= name "g"
+                   , gridStep   = 0.01              &= name "g"
                    },
            Render { xpixels     = 1000              &= name "x"
                   , ypixels     = 1000              &= name "y"
@@ -34,7 +34,7 @@ getConf = cmdArgs $ modes [
                   , palette     = Flames            &= name "p"
                   , curve       = Line              &= name "C"
                   },
-           ShowCells { gridStep = 0.05              &= name "g"
+           ShowCells { gridStep = 0.01              &= name "g"
                      , maxK     = 1000              &= name "K"
                      , animpath = "/tmp/cells.gif"  &= name "o" &= typFile
                   }

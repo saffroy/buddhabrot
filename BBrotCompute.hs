@@ -88,10 +88,20 @@ compute conf = do
     Just s -> return $ mkStdGen s
     Nothing -> getStdGen
 
-  let points = take (samples conf) $ randomRs (loCorner, hiCorner) randGen
-      selected = filter p points
+  let points = concat pointLists
+      step = gridStep conf
+      cells = selectCells step 255 -- (minK conf)
+      generators = iterate (fst . split) randGen
+      pointLists = map genPoints $ zip cells generators
+      pointsPerCell = samples conf `div` length cells
+      genPoints (cell, gen) = take pointsPerCell $ randomRs (corners cell) gen
+      corners (x, y) = ((x :+ y) - cellDiag / 2, (x :+ y) + cellDiag / 2)
+      cellDiag = step :+ step
+
+  let selected = filter p points
         where p = inSet (minK conf) (maxK conf)
-      cachefile = case ocachepath conf of
+
+  let cachefile = case ocachepath conf of
         Just s -> s
         Nothing -> printf "/tmp/buddhabrot-%s-%s_%s.bbc"
                    (toUnit $ samples conf)
