@@ -1,7 +1,8 @@
 {-# LANGUAGE BangPatterns #-}
 
-module BBrotRender(render) where
+module BBrotRender(showCells, render) where
 
+import Control.Monad
 import Data.Complex
 import Data.Array.IO
 import Data.Word(Word32, Word8)
@@ -9,6 +10,7 @@ import Codec.Picture
 import System.Console.CmdArgs
 
 import BBrotConf
+import BBrotCompute
 
 xmin = realPart loCorner
 xmax = realPart hiCorner
@@ -95,6 +97,11 @@ toImgCoords !xres !yres !z =
     (toPix xres xmin xrange $ realPart z,
      toPix yres ymin yrange $ imagPart z)
 
+toPlaneCoords :: Int -> Int -> Int -> Int -> Complex Double
+toPlaneCoords !xres !yres !i !j = x :+ y
+    where x = xmin + xrange * fromIntegral i / fromIntegral xres
+          y = ymin + yrange * fromIntegral j / fromIntegral yres
+
 
 render conf = do
   -- Load points of interest, render their orbits into a PNG image.
@@ -131,3 +138,49 @@ render conf = do
       pixFunc = toPixel curveFunc smallest biggest colorScheme
   ima <- withImage xres yres (getPix img xres pixFunc)
   writePng outfile ima
+
+
+showCells conf = do
+  -- Compute selection of cells (squares in the complex plane) that
+  -- are close to the edge of the Mandelbrot set, and render them as
+  -- animated GIF.
+  let step = gridStep conf
+      bailout = maxK conf
+      xres = 1000
+      yres = 1000
+      !cells = selectCells step bailout
+  whenNormal $ putStrLn $ "cell count: " ++ show (length cells)
+
+  let red   = PixelRGB8 255 0 0
+      black = PixelRGB8 0 0 0
+      white = PixelRGB8 255 255 255
+
+  whenNormal $ putStrLn "rendering cells"
+  cellMap <- newArray ((0, 0), (xres - 1, yres - 1)) False :: IO (IOUArray (Int, Int) Bool)
+  forM_ cells $ \(x, y) -> do
+    let cornerA = (x - step / 2) :+ (y - step / 2)
+        cornerB = (x + step / 2) :+ (y + step / 2)
+        (imin, jmin) = toImgCoords xres yres cornerA
+        (imax, jmax) = toImgCoords xres yres cornerB
+        coords = [ (i, j) | i <- [imin..imax], j <- [jmin..jmax],
+                                 i >= 0 && i < xres,
+                                 j >= 0 && j < yres ]
+    forM_ coords $ \(i, j) -> do
+      writeArray cellMap (i, j) True
+
+  let getCellPix :: Int -> Int -> IO PixelRGB8
+      getCellPix i j = do
+                   v <- readArray cellMap (i, j)
+                   return $ if v then red else black
+  imgCells <- withImage xres yres getCellPix
+
+  whenNormal $ putStrLn "rendering mandel"
+  let imgMandel = generateImage mandelRenderer xres yres
+      inMandelbrotSet z = not $ inSet 0 bailout z
+      mandelRenderer i j = if inMandelbrotSet $ toPlaneCoords xres yres i j
+                          then white else black
+
+  whenNormal $ putStrLn $ "writing " ++ animpath conf ++ " ..."
+  case writeGifAnimation (animpath conf) 100 LoopingForever [imgMandel, imgCells] of
+    Left err -> putStrLn $ "error generating gif animation: " ++ err
+    Right action -> action

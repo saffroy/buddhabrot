@@ -20,6 +20,7 @@ data BBrotConf = Compute { seed       :: Maybe Int
                          , minK       :: Int
                          , maxK       :: Int
                          , ocachepath :: Maybe String
+                         , gridStep   :: Double
                          }
                | Render { xpixels     :: Int
                         , ypixels     :: Int
@@ -28,5 +29,9 @@ data BBrotConf = Compute { seed       :: Maybe Int
                         , palette     :: ColorPalette
                         , curve       :: Curve
                         }
+               | ShowCells { gridStep :: Double
+                           , maxK     :: Int
+                           , animpath :: String
+                           }
                  deriving (Show, Data, Typeable)
 
