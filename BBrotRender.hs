@@ -74,16 +74,15 @@ flames x = PixelRGB8 r g b
 toPixel :: (Double -> Double) -> Word32 -> Word32 -> (Word8 -> PixelRGB8) -> Word32 -> PixelRGB8
 toPixel curveFunc smallest biggest scheme = scheme . norm curveFunc smallest biggest
 
-getPix :: IOUArray Int Word32 -> Int -> (Word32 -> PixelRGB8) -> Int -> Int -> IO PixelRGB8
-getPix img xres toRGB x y = do
-  v <- readArray img (x + xres * y)
+getPix :: IOUArray (Int, Int) Word32 -> (Word32 -> PixelRGB8) -> Int -> Int -> IO PixelRGB8
+getPix img toRGB x y = do
+  v <- readArray img (x, y)
   return $ toRGB v
 
-plotPix :: IOUArray Int Word32 -> Int -> (Int, Int) -> IO ()
-plotPix !img !xres (!x, !y) = do
-  let !offset = y * xres + x
-  v <- readArray img offset
-  writeArray img offset (v + 1)
+plotPix :: IOUArray (Int, Int) Word32 -> (Int, Int) -> IO ()
+plotPix !img (!x, !y) = do
+  v <- readArray img (x, y)
+  writeArray img (x, y) (v + 1)
 
 rel :: Double -> Double -> Double -> Double
 rel !lo !range !v = (v - lo) / range
@@ -114,10 +113,9 @@ render conf = do
 
   let xres = xpixels conf
       yres = ypixels conf
-      nPixels = xres * yres
       coords = map (toImgCoords xres yres) result
-  img <- newArray (0, nPixels - 1) (0 :: Word32) :: IO (IOUArray Int Word32)
-  mapM_ (plotPix img xres) coords
+  img <- newArray ((0, 0), (xres - 1, yres - 1)) 0 :: IO (IOUArray (Int, Int) Word32)
+  mapM_ (plotPix img) coords
   values <- getElems img
   whenLoud $ putStrLn $ "img points: " ++ show (sum values)
 
@@ -136,7 +134,7 @@ render conf = do
         Root -> sqrt
         Square -> (**2)
       pixFunc = toPixel curveFunc smallest biggest colorScheme
-  ima <- withImage xres yres (getPix img xres pixFunc)
+  ima <- withImage xres yres (getPix img pixFunc)
   writePng outfile ima
 
 
