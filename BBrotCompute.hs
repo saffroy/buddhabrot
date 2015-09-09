@@ -3,13 +3,17 @@
 
 module BBrotCompute(compute, selectCells, inSet) where
 
+import Data.Aeson(encode, decode)
+import Data.Array
+import qualified Data.ByteString.Lazy as BS
 import Data.Complex
+import Data.Maybe
+import System.Console.CmdArgs
 import System.Random
 import Text.Printf
-import System.Console.CmdArgs
-import Data.Array
 
 import BBrotConf
+import BBrotSelection
 
 
 instance Random (Complex Double) where
@@ -67,11 +71,18 @@ inCardioBulb !x !y = inCardio || inBulb
         inCardio = q * (q + (x - 1/4)) < sqr y / 4
         inBulb = sqr (x + 1) + sqr y < 1 / 16
 
-inSet :: Int -> Int -> Complex Double -> Bool
-inSet !minK !maxK !z = not (inCardioBulb x y) && k >= minK && k < maxK
+toMaybeBBPoint :: Int -> Int -> Complex Double -> Maybe BBPoint
+toMaybeBBPoint !minK !maxK !z = if not (inCardioBulb x y) && k >= minK && k < maxK
+                         then Just (BBPoint x y k)
+                         else Nothing
   where x = realPart z
         y = imagPart z
         k = iterations maxK x y x y 0
+
+inSet :: Int -> Int -> Complex Double -> Bool
+inSet !minK !maxK !z = p $ toMaybeBBPoint minK maxK z
+  where p (Just _) = False
+        p Nothing  = True
 
 toUnit n | n < 10^3  = show n ++ ""
          | n < 10^6  = show (n `div` 10^3) ++ "K"
@@ -98,8 +109,8 @@ compute conf = do
       corners (x, y) = ((x :+ y) - cellDiag / 2, (x :+ y) + cellDiag / 2)
       cellDiag = step :+ step
 
-  let selected = filter p points
-        where p = inSet (minK conf) (maxK conf)
+  let selected = concat $ map (maybeToList . f) points
+        where f = toMaybeBBPoint (minK conf) (maxK conf)
 
   let cachefile = case ocachepath conf of
         Just s -> s
@@ -109,5 +120,5 @@ compute conf = do
                    (toUnit $ maxK conf)
 
   whenNormal $ putStrLn $ "Writing cache " ++ cachefile ++ " ..."
-  writeFile cachefile $ unlines . map show $ selected
+  BS.writeFile cachefile $ encode $ PointSelection selected
   whenLoud $ putStrLn $ "selected points: " ++ show (length selected)

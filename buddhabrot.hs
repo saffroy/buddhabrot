@@ -14,8 +14,8 @@ module Main(main) where
 
 import System.Console.CmdArgs
 
-import BBrotConf
 import BBrotCompute
+import BBrotConf
 import BBrotRender
 
 -- Note: CmdArgs annotations are impure, they can be used only once

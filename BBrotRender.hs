@@ -2,15 +2,21 @@
 
 module BBrotRender(showCells, render) where
 
-import Control.Monad
-import Data.Complex
-import Data.Array.IO
-import Data.Word(Word32, Word8)
 import Codec.Picture
+import Control.Monad
+import Data.Aeson
+import Data.Array.IO
+import qualified Data.ByteString.Lazy as BS
+import Data.Complex
+import Data.Maybe
+import Data.Word(Word32, Word8)
 import System.Console.CmdArgs
+import System.Exit
+import System.IO
 
-import BBrotConf
 import BBrotCompute
+import BBrotConf
+import BBrotSelection
 
 xmin = realPart loCorner
 xmax = realPart hiCorner
@@ -105,8 +111,14 @@ toPlaneCoords !xres !yres !i !j = x :+ y
 render conf = do
   -- Load points of interest, render their orbits into a PNG image.
   whenNormal $ putStrLn $ "Loading cache " ++ icachepath conf ++ " ..."
-  contents <- readFile $ icachepath conf
-  let selected = map (read :: String -> Complex Double) $ lines contents
+  contents <- BS.readFile $ icachepath conf
+  let maybePS = decode contents :: Maybe PointSelection
+  when (maybePS == Nothing) $ do
+    hPutStrLn stderr $ "failed to parse " ++ icachepath conf
+    exitFailure
+
+  let psel = pointList $ fromMaybe (PointSelection []) maybePS
+      selected = map (\(BBPoint x y _) -> x :+ y) psel
       orbits = concatMap orbs selected
       result = filter inWindow orbits
   whenNormal $ putStrLn $ "selected points: " ++ show (length selected)
