@@ -30,6 +30,8 @@ getConf = cmdArgs $ modes [
            Render { xpixels     = 1000              &= name "x"
                   , ypixels     = 1000              &= name "y"
                   , icachepath  = def               &= name "c" &= typFile
+                  , isComplex   = False             &= name "z"
+                  , dontRender  = False             &= name "r"
                   , imagepath   = Nothing           &= name "o" &= typFile
                   , palette     = Flames            &= name "p"
                   , curve       = Line              &= name "C"

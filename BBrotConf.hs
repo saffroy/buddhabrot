@@ -25,6 +25,8 @@ data BBrotConf = Compute { seed       :: Maybe Int
                | Render { xpixels     :: Int
                         , ypixels     :: Int
                         , icachepath  :: String
+                        , isComplex   :: Bool
+                        , dontRender  :: Bool
                         , imagepath   :: Maybe String
                         , palette     :: ColorPalette
                         , curve       :: Curve

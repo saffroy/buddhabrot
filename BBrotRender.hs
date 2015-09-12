@@ -13,6 +13,7 @@ import Data.Word(Word32, Word8)
 import System.Console.CmdArgs
 import System.Exit
 import System.IO
+import Text.Read
 
 import BBrotCompute
 import BBrotConf
@@ -107,20 +108,39 @@ toPlaneCoords !xres !yres !i !j = x :+ y
     where x = xmin + xrange * fromIntegral i / fromIntegral xres
           y = ymin + yrange * fromIntegral j / fromIntegral yres
 
+loadPointsJson :: String -> IO (Maybe PointSelection)
+loadPointsJson filepath = do
+  contents <- BS.readFile filepath
+  return $ (decode contents :: Maybe PointSelection)
+
+loadPointsComplex :: String -> IO (Maybe PointSelection)
+loadPointsComplex filepath = do
+  contents <- readFile filepath
+  let zs = concatMap g $ lines contents
+        where g = maybeToList . readMaybe :: String -> [Complex Double]
+      ps = map f zs
+        where f (x :+ y) = BBPoint x y 1
+  return $ if null ps
+           then Nothing
+           else Just (PointSelection ps)
 
 render conf = do
   -- Load points of interest, render their orbits into a PNG image.
   whenNormal $ putStrLn $ "Loading cache " ++ icachepath conf ++ " ..."
-  contents <- BS.readFile $ icachepath conf
-  let maybePS = decode contents :: Maybe PointSelection
+  maybePS <- if isComplex conf
+             then loadPointsComplex $ icachepath conf
+             else loadPointsJson $ icachepath conf
   when (maybePS == Nothing) $ do
     hPutStrLn stderr $ "failed to parse " ++ icachepath conf
+    when (not $ isComplex conf) $ hPutStrLn stderr "try with flag -z"
     exitFailure
 
   let psel = pointList $ fromMaybe (PointSelection []) maybePS
       selected = map (\(BBPoint x y _) -> x :+ y) psel
       orbits = concatMap orbs selected
-      result = filter inWindow orbits
+      result = filter inWindow $ if dontRender conf
+                                 then selected
+                                 else orbits
   whenNormal $ putStrLn $ "selected points: " ++ show (length selected)
 
   let xres = xpixels conf
