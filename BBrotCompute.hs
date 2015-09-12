@@ -3,6 +3,7 @@
 
 module BBrotCompute(compute, selectCells, inSet) where
 
+import Control.Monad.Par
 import Data.Aeson(encode, decode)
 import Data.Array
 import qualified Data.ByteString.Lazy as BS
@@ -22,6 +23,7 @@ instance Random (Complex Double) where
           (i, g2) = randomR (imagPart loPoint, imagPart hiPoint) g1
   random = randomR (0.0 :+ 0.0, 1.0 :+ 1.0)
 
+instance NFData BBPoint
 
 data GridPoint = GridPoint { xbase :: Double
                            , ybase :: Double
@@ -111,7 +113,7 @@ compute conf = do
 
   let pointLists = map genPoints $ zip cells generators
 
-  let selected = concat $ concatMap (map f) pointLists
+  let selected = concat $ concat $ runPar $ parMap (map f) pointLists
         where f = maybeToList . toMaybeBBPoint (minK conf) (maxK conf)
 
   let cachefile = fromMaybe defPath (ocachepath conf)
