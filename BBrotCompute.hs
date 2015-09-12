@@ -29,6 +29,7 @@ data GridPoint = GridPoint { xbase :: Double
                            }
                  deriving Show
 
+
 makeGrid :: Double -> Int -> Array (Int, Int) GridPoint
 makeGrid step bailout = array ((0, 0), (xsteps, ysteps)) points
   where (xmin :+ ymin) = loCorner
@@ -72,12 +73,13 @@ inCardioBulb !x !y = inCardio || inBulb
         inBulb = sqr (x + 1) + sqr y < 1 / 16
 
 toMaybeBBPoint :: Int -> Int -> Complex Double -> Maybe BBPoint
-toMaybeBBPoint !minK !maxK !z = if not (inCardioBulb x y) && k >= minK && k < maxK
-                         then Just (BBPoint x y k)
-                         else Nothing
-  where x = realPart z
-        y = imagPart z
-        k = iterations maxK x y x y 0
+toMaybeBBPoint !minK !maxK !z =
+  let x = realPart z
+      y = imagPart z
+      k = iterations maxK x y x y 0
+  in if not (inCardioBulb x y) && k >= minK && k < maxK
+     then Just (BBPoint x y k)
+     else Nothing
 
 inSet :: Int -> Int -> Complex Double -> Bool
 inSet !minK !maxK !z = p $ toMaybeBBPoint minK maxK z
@@ -99,26 +101,27 @@ compute conf = do
     Just s -> return $ mkStdGen s
     Nothing -> getStdGen
 
-  let points = concat pointLists
-      step = gridStep conf
-      cells = selectCells step 255 -- (minK conf)
-      generators = iterate (fst . split) randGen
-      pointLists = map genPoints $ zip cells generators
+  let step = gridStep conf
+      cells = selectCells step 255
       pointsPerCell = samples conf `div` length cells
+      generators = iterate (fst . split) randGen
       genPoints (cell, gen) = take pointsPerCell $ randomRs (corners cell) gen
       corners (x, y) = ((x :+ y) - cellDiag / 2, (x :+ y) + cellDiag / 2)
       cellDiag = step :+ step
 
-  let selected = concat $ map (maybeToList . f) points
-        where f = toMaybeBBPoint (minK conf) (maxK conf)
+  let pointLists = map genPoints $ zip cells generators
 
-  let cachefile = case ocachepath conf of
-        Just s -> s
-        Nothing -> printf "/tmp/buddhabrot-%s-%s_%s.bbc"
-                   (toUnit $ samples conf)
-                   (toUnit $ minK conf)
-                   (toUnit $ maxK conf)
+  let selected = concat $ concatMap (map f) pointLists
+        where f = maybeToList . toMaybeBBPoint (minK conf) (maxK conf)
 
-  whenNormal $ putStrLn $ "Writing cache " ++ cachefile ++ " ..."
+  let cachefile = fromMaybe defPath (ocachepath conf)
+        where defPath = printf "/tmp/buddhabrot-%s-%s_%s.bbc"
+                        (toUnit $ samples conf)
+                        (toUnit $ minK conf)
+                        (toUnit $ maxK conf)
+
+  whenNormal $ do
+    putStrLn $ "Selected cells: " ++ show (length cells)
+    putStrLn $ "Writing cache " ++ cachefile ++ " ..."
   BS.writeFile cachefile $ encode $ PointSelection selected
   whenLoud $ putStrLn $ "selected points: " ++ show (length selected)
