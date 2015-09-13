@@ -14,7 +14,10 @@ data BBPoint = BBPoint { pointX :: Double
 instance FromJSON BBPoint
 instance ToJSON BBPoint
 
-data PointSelection = PointSelection { pointList :: [BBPoint]
+data PointSelection = PointSelection { pointList   :: [BBPoint]
+                                     , commandLine :: Maybe [String]
+                                     , randGen     :: Maybe String
+                                     , timeStamp   :: Maybe String
                                      }
                deriving (Eq, Show, Generic)
 

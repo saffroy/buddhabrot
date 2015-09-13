@@ -108,6 +108,12 @@ toPlaneCoords !xres !yres !i !j = x :+ y
     where x = xmin + xrange * fromIntegral i / fromIntegral xres
           y = ymin + yrange * fromIntegral j / fromIntegral yres
 
+emptyPS = PointSelection { pointList   = []
+                         , commandLine = Nothing
+                         , randGen     = Nothing
+                         , timeStamp   = Nothing
+                         }
+
 loadPointsJson :: String -> IO (Maybe PointSelection)
 loadPointsJson filepath = do
   contents <- BS.readFile filepath
@@ -122,7 +128,7 @@ loadPointsComplex filepath = do
         where f (x :+ y) = BBPoint x y 1
   return $ if null ps
            then Nothing
-           else Just (PointSelection ps)
+           else Just (emptyPS { pointList = ps })
 
 render conf = do
   -- Load points of interest, render their orbits into a PNG image.
@@ -135,7 +141,7 @@ render conf = do
     when (not $ isComplex conf) $ hPutStrLn stderr "try with flag -z"
     exitFailure
 
-  let psel = pointList $ fromMaybe (PointSelection []) maybePS
+  let psel = pointList $ fromMaybe emptyPS maybePS
       selected = map (\(BBPoint x y _) -> x :+ y) psel
       orbits = concatMap orbs selected
       result = filter inWindow $ if dontRender conf

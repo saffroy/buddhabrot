@@ -9,6 +9,8 @@ import Data.Array
 import qualified Data.ByteString.Lazy as BS
 import Data.Complex
 import Data.Maybe
+import Data.Time
+import System.Environment
 import System.Console.CmdArgs
 import System.Random
 import Text.Printf
@@ -125,5 +127,8 @@ compute conf = do
   whenNormal $ do
     putStrLn $ "Selected cells: " ++ show (length cells)
     putStrLn $ "Writing cache " ++ cachefile ++ " ..."
-  BS.writeFile cachefile $ encode $ PointSelection selected
+  args <- getArgs
+  currentTime <- getCurrentTime
+  BS.writeFile cachefile $ encode $
+    PointSelection selected (Just args) (Just $ show randGen) (Just $ show currentTime)
   whenLoud $ putStrLn $ "selected points: " ++ show (length selected)
