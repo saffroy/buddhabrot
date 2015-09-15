@@ -190,6 +190,7 @@ showCells conf = do
   let red   = PixelRGB8 255 0 0
       black = PixelRGB8 0 0 0
       white = PixelRGB8 255 255 255
+      grey  = PixelRGB8 64 64 64
 
   whenNormal $ putStrLn "rendering cells"
   cellMap <- newArray ((0, 0), (xres - 1, yres - 1)) False :: IO (IOUArray (Int, Int) Bool)
@@ -212,9 +213,9 @@ showCells conf = do
 
   whenNormal $ putStrLn "rendering mandel"
   let imgMandel = generateImage mandelRenderer xres yres
-      inMandelbrotSet z = not $ inSet 0 bailout z
+      inMandelbrotSet z = inSet 0 bailout z
       mandelRenderer i j = if inMandelbrotSet $ toPlaneCoords xres yres i j
-                          then white else black
+                           then grey else black
 
   whenNormal $ putStrLn $ "writing " ++ animpath conf ++ " ..."
   case writeGifAnimation (animpath conf) 100 LoopingForever [imgMandel, imgCells] of
