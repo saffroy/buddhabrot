@@ -6,9 +6,11 @@ import Codec.Picture
 import Control.Monad
 import Data.Aeson
 import Data.Array.IO
+import Data.Array.Unboxed
 import qualified Data.ByteString.Lazy as BS
 import Data.Complex
 import Data.Maybe
+import Data.List
 import Data.Word(Word32, Word8)
 import System.Console.CmdArgs
 import System.Exit
@@ -27,22 +29,18 @@ ymax = imagPart hiCorner
 xrange = xmax - xmin
 yrange = ymax - ymin
 
-orbit :: Double -> Double -> Double -> Double -> [Complex Double] -> [Complex Double]
-orbit !x !y !x0 !y0 l =
-  let !x2 = x * x
-      !y2 = y * y
-      !newx = (x2 - y2 + x0)
-      !newy = (2 * x * y + y0)
-  in
-   if x2 + y2 > 4
-   then l
-   else orbit newx newy x0 y0 (newx :+ newy : l)
-
 orbs :: Complex Double -> [Complex Double]
-orbs z = orbit x y x y []
-  where x = realPart z
-        y = imagPart z
-
+orbs !(x0 :+ y0) = unfoldr f (x0, y0)
+  where f :: (Double, Double) -> Maybe (Complex Double, (Double, Double))
+        f (!x, !y) =
+          let !x2 = x * x
+              !y2 = y * y
+              !newx = (x2 - y2 + x0)
+              !newy = (2 * x * y + y0)
+          in
+           if x2 + y2 > 4
+           then Nothing
+           else Just (newx :+ newy, (newx, newy))
 
 inWindow :: Complex Double -> Bool
 inWindow z = x >= xmin && x < xmax && y >= ymin && y < ymax
@@ -154,16 +152,23 @@ render conf = do
       coords = map (toImgCoords xres yres) result
   img <- newArray ((0, 0), (xres - 1, yres - 1)) 0 :: IO (IOUArray (Int, Int) Word32)
   mapM_ (plotPix img) coords
-  values <- getElems img
-  whenLoud $ putStrLn $ "img points: " ++ show (sum values)
+  whenNormal $ putStrLn $ "done plotting"
+
+  img2 <- freeze img :: IO (UArray (Int, Int) Word32)
+  let values = elems img2
+      !v0 = values!!0
+      (!total, !smallest, !biggest) = foldl' f (0, v0, v0) values
+        where f (!x, !y, !z) !a = (a + x, min a y, max a z)
+
+  whenNormal $ do
+    putStrLn $ "img points: " ++ show total
+    putStrLn $ "value range: " ++ show smallest ++ "-" ++ show biggest
 
   let outfile = case imagepath conf of
         Just s -> s
         Nothing -> icachepath conf ++ ".png"
   whenNormal $ putStrLn $ "Writing " ++ outfile ++ " ..."
-  let !smallest = minimum values
-      !biggest  = maximum values
-      colorScheme = case palette conf of
+  let colorScheme = case palette conf of
         Flames -> flames
         Gray -> gray
         Reddish -> reddish
@@ -172,8 +177,8 @@ render conf = do
         Root -> sqrt
         Square -> (**2)
       pixFunc = toPixel curveFunc smallest biggest colorScheme
-  ima <- withImage xres yres (getPix img pixFunc)
-  writePng outfile ima
+      renderer i j = pixFunc $ img2!(i,j)
+  writePng outfile $ generateImage renderer xres yres
 
 
 showCells conf = do
