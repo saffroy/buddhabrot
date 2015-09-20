@@ -5,7 +5,7 @@ module BBrotConf where
 import Data.Complex
 import System.Console.CmdArgs
 
-
+loCorner, hiCorner :: Complex Double
 loCorner = (-2.0) :+ (-1.5)
 hiCorner =   1.0  :+   1.5
 
@@ -17,8 +17,8 @@ data Curve = Line | Square | Root
 
 data BBrotConf = Compute { seed       :: Maybe Int
                          , samples    :: Int
-                         , minK       :: Int
-                         , maxK       :: Int
+                         , minIters   :: Int
+                         , maxIters   :: Int
                          , ocachepath :: Maybe String
                          , gridStep   :: Double
                          }
@@ -32,7 +32,7 @@ data BBrotConf = Compute { seed       :: Maybe Int
                         , curve       :: Curve
                         }
                | ShowCells { gridStep :: Double
-                           , maxK     :: Int
+                           , maxIters :: Int
                            , animpath :: String
                            }
                  deriving (Show, Data, Typeable)

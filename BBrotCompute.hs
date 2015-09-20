@@ -1,17 +1,20 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE BangPatterns #-}
 
+{-# OPTIONS_GHC -fno-warn-orphans #-} -- do not warn on local instance of Random for Complex
+
 module BBrotCompute(compute, selectCells, inSet) where
 
 import Control.Monad.Par
-import Data.Aeson(encode, decode)
+import Data.Aeson(encode)
 import Data.Array
 import qualified Data.ByteString.Lazy as BS
 import Data.Complex
+import Data.List
 import Data.Maybe
 import Data.Time
 import System.Environment
-import System.Console.CmdArgs
+import System.Console.CmdArgs(whenNormal, whenLoud)
 import System.Random
 import Text.Printf
 
@@ -20,12 +23,10 @@ import BBrotSelection
 
 
 instance Random (Complex Double) where
-  randomR (!loPoint, !hiPoint) g = (r :+ i, g2)
-    where (r, g1) = randomR (realPart loPoint, realPart hiPoint) g
-          (i, g2) = randomR (imagPart loPoint, imagPart hiPoint) g1
+  randomR (!(x0 :+ y0), !(x1 :+ y1)) g = (r :+ i, g2)
+    where (!r, !g1) = randomR (x0, x1) g
+          (!i, !g2) = randomR (y0, y1) g1
   random = randomR (0.0 :+ 0.0, 1.0 :+ 1.0)
-
-instance NFData BBPoint
 
 data GridPoint = GridPoint { xbase :: Double
                            , ybase :: Double
@@ -90,25 +91,28 @@ inSet !minK !maxK !z = p $ toMaybeBBPoint minK maxK z
   where p (Just _) = False
         p Nothing  = True
 
-toUnit n | n < 10^3  = show n ++ ""
-         | n < 10^6  = show (n `div` 10^3) ++ "K"
-         | n < 10^9  = show (n `div` 10^6) ++ "M"
-         | otherwise = show (n `div` 10^9) ++ "G"
+toUnit :: Int -> String
+toUnit n = show (n `div` d) ++ unit
+  where pow :: Int -> Int -> Int
+        pow x y = x ^ y
+        l = [ (10 `pow` 9, "G"), (10 `pow` 6, "M"), (10 `pow` 3, "K") ]
+        (d, unit) = fromMaybe (1, "") $ find ((<= n) . fst) l
 
+compute :: BBrotConf -> IO ()
 compute conf = do
   -- Pick random points in the complex plane, test their orbits,
   -- save the interesting ones.
 
   whenNormal $ putStrLn $ printf "Sampling %s points..." $ toUnit $ samples conf
 
-  randGen <- case seed conf of
+  initRandGen <- case seed conf of
     Just s -> return $ mkStdGen s
     Nothing -> getStdGen
 
   let step = gridStep conf
       cells = selectCells step 255
       pointsPerCell = samples conf `div` length cells
-      generators = iterate (fst . split) randGen
+      generators = iterate (fst . split) initRandGen
       genPoints (cell, gen) = take pointsPerCell $ randomRs (corners cell) gen
       corners (x, y) = ((x :+ y) - cellDiag / 2, (x :+ y) + cellDiag / 2)
       cellDiag = step :+ step
@@ -116,13 +120,13 @@ compute conf = do
   let pointLists = map genPoints $ zip cells generators
 
   let selected = concat $ concat $ runPar $ parMap (map f) pointLists
-        where f = maybeToList . toMaybeBBPoint (minK conf) (maxK conf)
+        where f = maybeToList . toMaybeBBPoint (minIters conf) (maxIters conf)
 
   let cachefile = fromMaybe defPath (ocachepath conf)
         where defPath = printf "/tmp/buddhabrot-%s-%s_%s.bbc"
                         (toUnit $ samples conf)
-                        (toUnit $ minK conf)
-                        (toUnit $ maxK conf)
+                        (toUnit $ minIters conf)
+                        (toUnit $ maxIters conf)
 
   whenNormal $ do
     putStrLn $ "Selected cells: " ++ show (length cells)
@@ -130,5 +134,5 @@ compute conf = do
   args <- getArgs
   currentTime <- getCurrentTime
   BS.writeFile cachefile $ encode $
-    PointSelection selected (Just args) (Just $ show randGen) (Just $ show currentTime)
+    PointSelection selected (Just args) (Just $ show initRandGen) (Just $ show currentTime)
   whenLoud $ putStrLn $ "selected points: " ++ show (length selected)

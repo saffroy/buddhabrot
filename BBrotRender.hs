@@ -4,7 +4,7 @@ module BBrotRender(showCells, render) where
 
 import Codec.Picture
 import Control.Monad
-import Data.Aeson
+import Data.Aeson(decode)
 import Data.Array.IO
 import Data.Array.Unboxed
 import qualified Data.ByteString.Lazy as BS
@@ -12,20 +12,22 @@ import Data.Complex
 import Data.Maybe
 import Data.List
 import Data.Word(Word32, Word8)
-import System.Console.CmdArgs
+import System.Console.CmdArgs(whenNormal)
 import System.Exit
 import System.IO
-import Text.Read
+import Text.Read(readMaybe)
 
 import BBrotCompute
 import BBrotConf
 import BBrotSelection
 
+xmin, xmax, ymin, ymax :: Double
 xmin = realPart loCorner
 xmax = realPart hiCorner
 ymin = imagPart loCorner
 ymax = imagPart hiCorner
 
+xrange, yrange :: Double
 xrange = xmax - xmin
 yrange = ymax - ymin
 
@@ -49,11 +51,10 @@ inWindow z = x >= xmin && x < xmax && y >= ymin && y < ymax
 
 
 norm :: (Double -> Double) -> Word32 -> Word32 -> Word32 -> Word8
-norm curveFunc min max cnt = fromIntegral v
-  where s = 2.0 * fromIntegral (cnt - min) / fromIntegral (max - min)
-        t = if s > 1.0 then 1.0 else s
-        u = curveFunc t
-        v = floor $ u * 255
+norm curveFunc minV maxV cnt = v
+  where t = fromIntegral (cnt - minV) / fromIntegral (maxV - minV)
+        u = curveFunc $ min 1.0 (2.0 * t)
+        v = floor $ u * 255 :: Word8
 
 
 gray :: Word8 -> PixelRGB8
@@ -79,18 +80,13 @@ flames x = PixelRGB8 r g b
 toPixel :: (Double -> Double) -> Word32 -> Word32 -> (Word8 -> PixelRGB8) -> Word32 -> PixelRGB8
 toPixel curveFunc smallest biggest scheme = scheme . norm curveFunc smallest biggest
 
-getPix :: IOUArray (Int, Int) Word32 -> (Word32 -> PixelRGB8) -> Int -> Int -> IO PixelRGB8
-getPix img toRGB x y = do
-  v <- readArray img (x, y)
-  return $ toRGB v
-
 plotPix :: IOUArray (Int, Int) Word32 -> (Int, Int) -> IO ()
 plotPix !img (!x, !y) = do
   v <- readArray img (x, y)
   writeArray img (x, y) (v + 1)
 
 rel :: Double -> Double -> Double -> Double
-rel !lo !range !v = (v - lo) / range
+rel !lo !realrange !v = (v - lo) / realrange
 
 toPix :: Int -> Double -> Double -> Double -> Int
 toPix !pixrange !realmin !realrange !a =
@@ -106,6 +102,7 @@ toPlaneCoords !xres !yres !i !j = x :+ y
     where x = xmin + xrange * fromIntegral i / fromIntegral xres
           y = ymin + yrange * fromIntegral j / fromIntegral yres
 
+emptyPS :: PointSelection
 emptyPS = PointSelection { pointList   = []
                          , commandLine = Nothing
                          , randGen     = Nothing
@@ -115,7 +112,7 @@ emptyPS = PointSelection { pointList   = []
 loadPointsJson :: String -> IO (Maybe PointSelection)
 loadPointsJson filepath = do
   contents <- BS.readFile filepath
-  return $ (decode contents :: Maybe PointSelection)
+  return (decode contents :: Maybe PointSelection)
 
 loadPointsComplex :: String -> IO (Maybe PointSelection)
 loadPointsComplex filepath = do
@@ -128,15 +125,17 @@ loadPointsComplex filepath = do
            then Nothing
            else Just (emptyPS { pointList = ps })
 
+render :: BBrotConf -> IO ()
 render conf = do
   -- Load points of interest, render their orbits into a PNG image.
   whenNormal $ putStrLn $ "Loading cache " ++ icachepath conf ++ " ..."
   maybePS <- if isComplex conf
              then loadPointsComplex $ icachepath conf
              else loadPointsJson $ icachepath conf
-  when (maybePS == Nothing) $ do
+  when (isNothing maybePS) $ do
     hPutStrLn stderr $ "failed to parse " ++ icachepath conf
-    when (not $ isComplex conf) $ hPutStrLn stderr "try with flag -z"
+    unless (isComplex conf) $
+      hPutStrLn stderr "try with flag -z"
     exitFailure
 
   let psel = pointList $ fromMaybe emptyPS maybePS
@@ -152,11 +151,11 @@ render conf = do
       coords = map (toImgCoords xres yres) result
   img <- newArray ((0, 0), (xres - 1, yres - 1)) 0 :: IO (IOUArray (Int, Int) Word32)
   mapM_ (plotPix img) coords
-  whenNormal $ putStrLn $ "done plotting"
+  whenNormal $ putStrLn "done plotting"
 
   img2 <- freeze img :: IO (UArray (Int, Int) Word32)
   let values = elems img2
-      !v0 = values!!0
+      !v0 = head values
       (!total, !smallest, !biggest) = foldl' f (0, v0, v0) values
         where f (!x, !y, !z) !a = (a + x, min a y, max a z)
 
@@ -164,9 +163,8 @@ render conf = do
     putStrLn $ "img points: " ++ show total
     putStrLn $ "value range: " ++ show smallest ++ "-" ++ show biggest
 
-  let outfile = case imagepath conf of
-        Just s -> s
-        Nothing -> icachepath conf ++ ".png"
+  let outfile = fromMaybe defPath (imagepath conf)
+        where defPath = icachepath conf ++ ".png"
   whenNormal $ putStrLn $ "Writing " ++ outfile ++ " ..."
   let colorScheme = case palette conf of
         Flames -> flames
@@ -181,12 +179,13 @@ render conf = do
   writePng outfile $ generateImage renderer xres yres
 
 
+showCells :: BBrotConf -> IO ()
 showCells conf = do
   -- Compute selection of cells (squares in the complex plane) that
   -- are close to the edge of the Mandelbrot set, and render them as
   -- animated GIF.
   let step = gridStep conf
-      bailout = maxK conf
+      bailout = maxIters conf
       xres = 1000
       yres = 1000
       !cells = selectCells step bailout
@@ -194,7 +193,6 @@ showCells conf = do
 
   let red   = PixelRGB8 255 0 0
       black = PixelRGB8 0 0 0
-      white = PixelRGB8 255 255 255
       grey  = PixelRGB8 64 64 64
 
   whenNormal $ putStrLn "rendering cells"
@@ -207,7 +205,7 @@ showCells conf = do
         coords = [ (i, j) | i <- [imin..imax], j <- [jmin..jmax],
                                  i >= 0 && i < xres,
                                  j >= 0 && j < yres ]
-    forM_ coords $ \(i, j) -> do
+    forM_ coords $ \(i, j) ->
       writeArray cellMap (i, j) True
 
   let getCellPix :: Int -> Int -> IO PixelRGB8

@@ -2,7 +2,8 @@
 
 module BBrotSelection where
 
-import Data.Aeson
+import Control.Monad.Par
+import Data.Aeson(FromJSON, ToJSON)
 import GHC.Generics
 
 data BBPoint = BBPoint { pointX :: Double
@@ -13,6 +14,8 @@ data BBPoint = BBPoint { pointX :: Double
 
 instance FromJSON BBPoint
 instance ToJSON BBPoint
+instance NFData BBPoint
+
 
 data PointSelection = PointSelection { pointList   :: [BBPoint]
                                      , commandLine :: Maybe [String]
