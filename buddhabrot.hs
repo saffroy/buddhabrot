@@ -22,11 +22,11 @@ import BBrotRender
 getConf :: IO BBrotConf
 getConf = cmdArgs $ modes [
            Compute { seed       = Nothing           &= name "s"
-                   , samples    = 1000 * 1000 * 500 &= name "n"
-                   , minIters   = 1000 * 1          &= name "k"
-                   , maxIters   = 1000 * 20         &= name "K"
+                   , samples    = 1000 * 300        &= name "n"
+                   , minIters   = 1000 * 100        &= name "k"
+                   , maxIters   = 1000 * 200        &= name "K"
                    , ocachepath = Nothing           &= name "c" &= typFile
-                   , gridStep   = 0.01              &= name "g"
+                   , gridStep   = 0.001             &= name "g"
                    },
            Render { xpixels     = 1000              &= name "x"
                   , ypixels     = 1000              &= name "y"
@@ -35,9 +35,9 @@ getConf = cmdArgs $ modes [
                   , dontRender  = False             &= name "r"
                   , imagepath   = Nothing           &= name "o" &= typFile
                   , palette     = Flames            &= name "p"
-                  , curve       = Line              &= name "C"
+                  , curve       = Root              &= name "C"
                   },
-           ShowCells { gridStep = 0.01              &= name "g"
+           ShowCells { gridStep = 0.001             &= name "g"
                      , maxIters = 1000              &= name "K"
                      , animpath = "cells.gif"       &= name "o" &= typFile
                   }
