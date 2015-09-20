@@ -28,9 +28,9 @@ instance Random (Complex Double) where
           (!i, !g2) = randomR (y0, y1) g1
   random = randomR (0.0 :+ 0.0, 1.0 :+ 1.0)
 
-data GridPoint = GridPoint { xbase :: Double
-                           , ybase :: Double
-                           , inMandelbrotSet :: Bool
+data GridPoint = GridPoint { xbase :: !Double
+                           , ybase :: !Double
+                           , inMandelbrotSet :: !Bool
                            }
                  deriving Show
 
