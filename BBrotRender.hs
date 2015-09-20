@@ -208,17 +208,16 @@ showCells conf = do
     forM_ coords $ \(i, j) ->
       writeArray cellMap (i, j) True
 
-  let getCellPix :: Int -> Int -> IO PixelRGB8
-      getCellPix i j = do
-                   v <- readArray cellMap (i, j)
-                   return $ if v then red else black
-  imgCells <- withImage xres yres getCellPix
-
   whenNormal $ putStrLn "rendering mandel"
   let imgMandel = generateImage mandelRenderer xres yres
       inMandelbrotSet z = inSet 0 bailout z
       mandelRenderer i j = if inMandelbrotSet $ toPlaneCoords xres yres i j
                            then grey else black
+
+  cellMapPure <- freeze cellMap :: IO (UArray (Int, Int) Bool)
+  let imgCells = generateImage cellRenderer xres yres
+      cellRenderer i j = if cellMapPure!(i,j)
+                         then red else mandelRenderer i j
 
   whenNormal $ putStrLn $ "writing " ++ animpath conf ++ " ..."
   case writeGifAnimation (animpath conf) 100 LoopingForever [imgMandel, imgCells] of
