@@ -176,7 +176,7 @@ render conf = do
         Square -> (**2)
       pixFunc = toPixel curveFunc smallest biggest colorScheme
       renderer i j = pixFunc $ img2!(i,j)
-  writePng outfile $ generateImage renderer xres yres
+  writePng outfile $ generateImage (flip $ renderer) yres xres
 
 
 showCells :: BBrotConf -> IO ()
@@ -209,13 +209,13 @@ showCells conf = do
       writeArray cellMap (i, j) True
 
   whenNormal $ putStrLn "rendering mandel"
-  let imgMandel = generateImage mandelRenderer xres yres
+  let imgMandel = generateImage (flip $ mandelRenderer) yres xres
       inMandelbrotSet z = inSet 0 bailout z
       mandelRenderer i j = if inMandelbrotSet $ toPlaneCoords xres yres i j
                            then grey else black
 
   cellMapPure <- freeze cellMap :: IO (UArray (Int, Int) Bool)
-  let imgCells = generateImage cellRenderer xres yres
+  let imgCells = generateImage (flip $ cellRenderer) yres xres
       cellRenderer i j = if cellMapPure!(i,j)
                          then red else mandelRenderer i j
 
