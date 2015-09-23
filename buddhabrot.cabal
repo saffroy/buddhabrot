@@ -1,0 +1,26 @@
+name:                buddhabrot
+version:             0.0.1.0
+synopsis:            A buddhabrot image generator
+homepage:            http://github.com/saffroy/buddhabrot
+license:             BSD3
+license-file:        LICENSE
+author:              Jean-Marc Saffroy
+maintainer:          saffroy@gmail.com
+category:            Graphics
+build-type:          Simple
+cabal-version:       >=1.10
+
+executable buddhabrot
+  main-is:             buddhabrot.hs
+  other-extensions:    BangPatterns, DeriveGeneric, DeriveDataTypeable, FlexibleInstances
+  build-depends:       base >=4.8 && <4.9
+                     , JuicyPixels >=3.2 && <3.3
+                     , array >=0.5 && <0.6
+                     , bytestring >=0.10 && <0.11
+                     , monad-par >=0.3 && <0.4
+                     , cmdargs >=0.10 && <0.11
+                     , time >=1.5 && <1.6
+                     , random >=1.1 && <1.2
+                     , aeson >=0.9 && <0.10
+  default-language:    Haskell2010
+  ghc-options:         -Wall -O3 -rtsopts -fllvm -threaded
